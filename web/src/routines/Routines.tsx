@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { Routine, RoutineSchedule } from "../../../shared/routines";
 import type { Exercise } from "../../../shared/exercises";
-import { listRoutines, loadCatalog, request, loadSchedules, scheduleRoutine, updateSchedule, deleteSchedule } from "./api";
+import { ApiError, listRoutines, loadActiveSession, loadCatalog, request, loadSchedules, scheduleRoutine, startTrainingSession, updateSchedule, deleteSchedule } from "./api";
 import { RoutineForm } from "./RoutineForm";
 import { RoutineDialog } from "./RoutineDialog";
+import { trainingSessionRoute } from "./TrainingSession";
 import "./routine-workspace.css";
 
-type Props = { route: string; onDirty: (dirty: boolean) => void; onSaving: (saving: boolean) => void };
+type Props = {
+  route: string;
+  focusHeading: boolean;
+  onDirty: (dirty: boolean) => void;
+  onSaving: (saving: boolean) => void;
+};
 type Data = { status: "loading" } | { status: "error" } | { status: "ready"; routines: Routine[]; exercises: Exercise[]; schedules: RoutineSchedule[] };
 
-export function Routines({ route, onDirty, onSaving }: Props) {
+export function Routines({ route, focusHeading, onDirty, onSaving }: Props) {
   const [data, setData] = useState<Data>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState<Routine | null>(null);
@@ -23,6 +29,10 @@ export function Routines({ route, onDirty, onSaving }: Props) {
   const createRef = useRef<HTMLButtonElement>(null);
   const editRefs = useRef(new Map<string, HTMLButtonElement>());
   const returnTo = useRef<string | null>(null);
+  const [hasActiveSession, setHasActiveSession] = useState(false);
+  const [startingKey, setStartingKey] = useState<string | null>(null);
+  const [startError, setStartError] = useState<{ key: string; message: string } | null>(null);
+  const startRequest = useRef<AbortController | null>(null);
 
   // Estados para la programación (HU05 y HU06)
   const [schedulingId, setSchedulingId] = useState<string | null>(null);
@@ -31,6 +41,10 @@ export function Routines({ route, onDirty, onSaving }: Props) {
   const [newDate, setNewDate] = useState("");
   // Sergio Alejandro - H10
   const [scheduleToDelete, setScheduleToDelete] = useState<RoutineSchedule | null>(null); // <-- AÑADE ESTA LÍNEA AQUÍ
+
+  useEffect(() => {
+    if (focusHeading) headingRef.current?.focus();
+  }, [focusHeading]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -46,6 +60,47 @@ export function Routines({ route, onDirty, onSaving }: Props) {
     });
     return () => controller.abort();
   }, [route, attempt]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadActiveSession(controller.signal).then(session => {
+      if (!controller.signal.aborted && session) setHasActiveSession(true);
+    }).catch(() => {
+      // An unavailable active session must leave the routine list usable.
+    });
+    return () => {
+      controller.abort();
+      startRequest.current?.abort();
+    };
+  }, []);
+
+  async function startSession(routineId: string, key: string) {
+    if (startRequest.current) return;
+    const controller = new AbortController();
+    startRequest.current = controller;
+    setStartingKey(key);
+    setStartError(null);
+    try {
+      await startTrainingSession(routineId, controller.signal);
+      if (!controller.signal.aborted) window.location.hash = trainingSessionRoute;
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (error instanceof ApiError && error.status === 409) setHasActiveSession(true);
+      setStartError({ key, message: error instanceof ApiError
+        ? error.message : "No se pudo confirmar el inicio. Comprueba la conexión y vuelve a intentarlo." });
+    } finally {
+      startRequest.current = null;
+      if (!controller.signal.aborted) setStartingKey(null);
+    }
+  }
+
+  function startButton(routine: Routine, schedule?: RoutineSchedule) {
+    const key = schedule ? `schedule:${schedule.id}` : routine.id;
+    const label = startingKey === key ? "Iniciando sesión…" : "Iniciar sesión";
+    const name = schedule ? `${routine.name} · ${schedule.date}` : routine.name;
+    return <button type="button" className="routine-primary" aria-disabled={startingKey !== null}
+      aria-label={`${label} · ${name}`} onClick={() => { void startSession(routine.id, key); }}>{label}</button>;
+  }
 
   useEffect(() => {
     if (creating || editing || data.status !== "ready" || !returnTo.current) return;
@@ -140,6 +195,9 @@ export function Routines({ route, onDirty, onSaving }: Props) {
     </header>
 
     {notice && <p role="status" className="routine-feedback">{notice}</p>}
+    {hasActiveSession && <p>
+      <a className="routine-action-link routine-primary" href={trainingSessionRoute} tabIndex={0}>Continuar sesión en curso</a>
+    </p>}
     
     {/* Panel de Próximas Sesiones Mejorado (HU10) 
       Sergio Alejandro
@@ -209,6 +267,7 @@ export function Routines({ route, onDirty, onSaving }: Props) {
                       </div>
                     ) : (
                       <>
+                        {routine && startButton(routine, sched)}
                         <button 
                           type="button" 
                           className="routine-secondary" 
@@ -239,6 +298,8 @@ export function Routines({ route, onDirty, onSaving }: Props) {
                       </>
                     )}
                   </div>
+                  {startError?.key === `schedule:${sched.id}` &&
+                    <p role="alert" className="routine-feedback routine-feedback--error">{startError.message}</p>}
                 </li>
               );
             })}
@@ -302,6 +363,7 @@ export function Routines({ route, onDirty, onSaving }: Props) {
                     <p>{routine.items.length} {routine.items.length === 1 ? "ejercicio" : "ejercicios"} <span>Versión {routine.version}</span></p>
                   </div>
                   <div className="routine-saved-actions">
+                    {startButton(routine)}
                     <button type="button" className="routine-secondary" style={{ borderColor: "#cb0017", color: "#cb0017" }} onClick={() => setSchedulingId(schedulingId === routine.id ? null : routine.id)}>
                       Programar
                     </button>
@@ -312,6 +374,7 @@ export function Routines({ route, onDirty, onSaving }: Props) {
                       onClick={event => { event.currentTarget.focus(); setDeleteError(null); setRoutineToDelete(routine); }}>Borrar</button>
                   </div>
                 </div>
+                {startError?.key === routine.id && <p role="alert" className="routine-feedback routine-feedback--error">{startError.message}</p>}
                 
                 {schedulingId === routine.id && (
                   <div style={{ marginTop: "16px", padding: "16px", background: "#fdfdfd", border: "1px dashed #ccc", borderRadius: "4px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>

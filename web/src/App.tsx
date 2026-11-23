@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Catalog from "./Catalog";
 import { Routines } from "./routines/Routines";
+import { TrainingSession, trainingSessionRoute } from "./routines/TrainingSession";
 import "./routines/routines.css";
 
 export default function App() {
   const [route, setRoute] = useState(window.location.hash || "#/catalogo");
+  const [focusRoutinesHeading, setFocusRoutinesHeading] = useState(false);
   const current = useRef(route);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -15,6 +17,7 @@ export default function App() {
       if (saving || (dirty && !window.confirm("Tienes cambios sin guardar. ¿Quieres descartarlos?"))) {
         window.history.replaceState(null, "", current.current); return;
       }
+      setFocusRoutinesHeading(current.current === trainingSessionRoute && next === "#/rutinas");
       current.current = next; setDirty(false); setRoute(next); window.scrollTo(0, 0);
     }
     function unload(event: BeforeUnloadEvent) {
@@ -44,7 +47,9 @@ export default function App() {
       </nav>
     </header>
     <div className="page-shell">
-      {routines ? <Routines key={route} route={route} onDirty={setDirty} onSaving={setSaving} /> : <Catalog />}
+      {route === trainingSessionRoute ? <TrainingSession />
+        : routines ? <Routines key={route} route={route} focusHeading={focusRoutinesHeading}
+          onDirty={setDirty} onSaving={setSaving} /> : <Catalog />}
     </div>
     <footer>Universidad Rey Juan Carlos · Healthy Life · Sprinters E5 <a className="media-credits-link" href="/media-credits.html" tabIndex={0}>Créditos de imágenes</a></footer>
   </>;

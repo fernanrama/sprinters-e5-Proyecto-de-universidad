@@ -70,7 +70,7 @@ Abrir:
 - **Estado de la API:** http://127.0.0.1:3001/health
 - **Catálogo JSON:** http://127.0.0.1:3001/exercises
 
-`npm run dev` arranca la web y la API en la misma terminal. Para detenerlas, pulsar **Ctrl+C**.
+`npm run dev` arranca la web y la API en la misma terminal. Para detenerlas, pulsar **Ctrl+C**. Cada ejecución de desarrollo parte de las rutinas de ejemplo, con la agenda vacía y sin sesión activa. Durante la ejecución, las rutinas, las programaciones y la sesión se guardan en un directorio temporal y sobreviven al recargar la página. Al volver a arrancar, se empieza con datos nuevos. Esto también se aplica a `npm run dev:api`. Para guardar datos entre arranques, usar `npm run build` y `npm start`.
 
 ### Windows y PowerShell
 
@@ -131,7 +131,7 @@ Abrir **http://127.0.0.1:3108/#/rutinas**. Mantener la terminal abierta; **Ctrl+
 
 La demo incluye cuerpo completo (8 ejercicios), torso (6), piernas y glúteos (7), empuje (5), tracción (5) y una sesión sin material (5). Todas tienen series, repeticiones, descanso y RIR.
 
-En el primer arranque, `api/data/routines.demo.json` y `api/data/schedules.demo.json` se copian a sus respectivos archivos locales, ignorados por Git. Las modificaciones sobreviven a recargas y reinicios; no se vuelve a aplicar la semilla si existe el archivo local. Las programaciones de demostración apuntan a rutinas disponibles en la demo. La demo no modifica los archivos personales `routines.local.json` ni `schedules.local.json`. El arranque habitual sigue utilizando el puerto 3001 y sus datos habituales.
+En el primer arranque, `api/data/routines.demo.json` y `api/data/schedules.demo.json` se copian a sus respectivos archivos locales, ignorados por Git. Las modificaciones sobreviven a recargas y reinicios; no se vuelve a aplicar la semilla si existe el archivo local. Las programaciones de demostración apuntan a rutinas disponibles en la demo. Los archivos de la demo son independientes de los que usa `npm start` en el puerto 3001.
 
 ### Pruebas de navegador
 
@@ -343,7 +343,7 @@ Las implementaciones antiguas de SCRUM-83 y SCRUM-89 se conservan en las etiquet
 
 Abrir **/#/rutinas** desde Mis rutinas. Las rutas con `#` funcionan en desarrollo y en la versión compilada.
 
-La API copia `api/data/routines.seed.json` al archivo ignorado `api/data/routines.local.json` solo cuando falta este último. Guardar escribe el JSON local; Cancelar conserva lo guardado. No hay base de datos. Usar únicamente datos ficticios. No ejecutar varios servidores escritores sobre el mismo archivo.
+La API inicializa las rutinas desde `api/data/routines.seed.json`. Con `npm start`, las guarda en el archivo ignorado `api/data/routines.local.json`. Con `npm run dev`, las guarda en el directorio temporal de esa ejecución. Guardar escribe el JSON local y Cancelar conserva lo guardado. No hay base de datos. Usar únicamente datos ficticios. No ejecutar varios servidores escritores sobre el mismo archivo.
 
 API de rutinas: `GET /api/routines`, `GET /api/routines/:id`, `POST /api/routines`, `PUT /api/routines/:id` y `DELETE /api/routines/:id`. POST recibe nombre e items y devuelve 201; DELETE devuelve 204. PUT recibe nombre, versión e items y devuelve la versión incrementada; responde 409 ante una versión desactualizada. Las rutas tienen también alias sin `/api`.
 

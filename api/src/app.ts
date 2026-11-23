@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import express, { Router, type ErrorRequestHandler } from "express";
 import compression from "compression";
 import { createRoutineStore, createScheduleStore, RoutineError, isRoutineCreate, isRoutineUpdate } from "./routines.js";
+import { createTrainingSessionStore } from "./trainingSessions.js";
 import { isExercise } from "../../shared/exercises.js";
 import type { Exercise } from "../../shared/exercises.js";
 export type { Exercise } from "../../shared/exercises.js";
@@ -13,6 +14,7 @@ export function createApp(options: {
   routinesFile?: URL;
   routinesSeed?: URL;
   scheduleFile?: URL;
+  trainingSessionFile?: URL;
 } = {}) {
   const app = express();
   app.disable("x-powered-by");
@@ -32,14 +34,22 @@ export function createApp(options: {
   const catalogFile = options.catalogFile ??
     new URL("../data/exercises.json", import.meta.url);
 
+  const trainingSessions = createTrainingSessionStore(
+    options.trainingSessionFile ?? new URL("../data/training-session.local.json", import.meta.url)
+  );
+
+  async function readCatalog() {
+    const catalog: unknown = JSON.parse(await readFile(catalogFile, "utf8"));
+    if (!Array.isArray(catalog) || !catalog.every(isExercise)) throw new Error("Invalid exercise catalog");
+    return catalog;
+  }
+
   router.get("/health", (_request, response) => {
     response.json({ status: "ok", service: "sprinters-e5-api" });
   });
 
   router.get("/exercises", async (request, response) => {
-    const catalog: unknown = JSON.parse(await readFile(catalogFile, "utf8"));
-    if (!Array.isArray(catalog) || !catalog.every(isExercise)) throw new Error("Invalid exercise catalog");
-    let exercises = catalog;
+    let exercises = await readCatalog();
     const groupQuery = typeof request.query.group === "string" ? request.query.group.trim().toLowerCase() : null;
     const tagQuery = typeof request.query.tag === "string" ? request.query.tag.trim().toLowerCase() : null;
     if (groupQuery) exercises = exercises.filter(ex => ex.muscleGroup.toLowerCase().includes(groupQuery) || (ex.tags && ex.tags.some(t => t.toLowerCase() === groupQuery)));
@@ -129,6 +139,28 @@ export function createApp(options: {
   });
   // ==========================================
 
+  router.post("/sessions", async (request, response) => {
+    const routineId: unknown = request.body?.routineId;
+    if (typeof routineId !== "string" || !routineId.trim()) {
+      throw new RoutineError(400, "Selecciona una rutina guardada.");
+    }
+    const session = await trainingSessions.start(routineId, async () => {
+      const routine = (await store.read()).find(candidate => candidate.id === routineId);
+      if (!routine) throw new RoutineError(404, "Rutina no encontrada.");
+      if (!routine.items.length) throw new RoutineError(422, "Añade al menos un ejercicio para iniciar la sesión.");
+      const names = new Map((await readCatalog()).map(exercise => [exercise.id, exercise.name]));
+      return {
+        ...routine,
+        items: routine.items.map(item => ({ ...item, exerciseName: names.get(item.exerciseId) ?? item.exerciseId })),
+      };
+    });
+    response.set("Cache-Control", "no-store").status(201).json(session);
+  });
+
+  router.get("/sessions/active", async (_request, response) => {
+    response.set("Cache-Control", "no-store").json(await trainingSessions.read());
+  });
+
   app.use("/api", router);
   app.use(router);
   if (options.webDirectory) app.use(express.static(options.webDirectory));
@@ -144,6 +176,11 @@ export function createApp(options: {
     }
     if (error.type === "entity.parse.failed" || error.type === "entity.too.large") {
       response.status(400).json({ error: "La petición JSON no es válida o es demasiado grande." });
+      return;
+    }
+    if (/^(?:\/api)?\/sessions(?:\/|$)/.test(_request.path)) {
+      console.error("No se pudo procesar la sesión:", error.message);
+      response.status(500).json({ error: "No se pudo guardar o recuperar la sesión. Inténtalo de nuevo." });
       return;
     }
     if (_request.path.startsWith("/routines") || _request.path.startsWith("/api/routines") || _request.path.startsWith("/schedules")) {

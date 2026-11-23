@@ -10,7 +10,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "concurrently --kill-others --names API,WEB \"npm run dev --workspace @sprinters/api\" \"npm run dev --workspace @sprinters/web\"",
+    "dev": "node api/scripts/dev.mjs --with-web",
     "dev:web": "npm run dev --workspace @sprinters/web",
     "dev:api": "npm run dev --workspace @sprinters/api",
     "typecheck": "npm run typecheck --workspaces",

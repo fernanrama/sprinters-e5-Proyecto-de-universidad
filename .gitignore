@@ -6,6 +6,8 @@ api/data/routines.demo.local.json
 api/data/routines.demo.local.json.*.tmp
 api/data/schedules.demo.local.json
 api/data/schedules.demo.local.json.*.tmp
+api/data/training-session*.local.json
+api/data/training-session*.local.json.*.tmp
 dist/
 build/
 coverage/

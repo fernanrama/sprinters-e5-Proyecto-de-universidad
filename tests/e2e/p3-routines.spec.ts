@@ -250,3 +250,86 @@ for (const width of [320, 390, 768, 1440]) {
     expect(saved.find(routine => routine.name === name)?.items).toEqual([]);
   });
 }
+
+test("inicia una sesión por teclado, conserva los ejercicios al recargar y avisa si la rutina está vacía", async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/#/rutinas");
+  const empty = page.getByRole("button", { name: "Iniciar sesión · Mi próxima sesión" });
+  const emptyResponse = page.waitForResponse(response =>
+    response.url().endsWith("/api/sessions") && response.request().method() === "POST");
+  await empty.press("Enter");
+  expect((await emptyResponse).status()).toBe(422);
+  await expect(page.getByRole("alert")).toHaveText("Añade al menos un ejercicio para iniciar la sesión.");
+  await expect(empty).toBeFocused();
+  await expect(page).toHaveURL(/#\/rutinas$/);
+
+  await page.getByRole("button", { name: "Iniciar sesión · Fuerza · cuerpo completo" }).press("Enter");
+  await expect(page).toHaveURL(/#\/rutinas\/sesion$/);
+  const heading = page.getByRole("heading", { name: "Sesión de entrenamiento" });
+  await expect(heading).toBeFocused();
+  const session = page.getByRole("region", { name: "Fuerza · cuerpo completo" });
+  await expect(session.getByRole("listitem")).toHaveCount(2);
+  await expect(session.getByRole("listitem").nth(0)).toContainText("Sentadilla");
+  await expect(session.getByRole("listitem").nth(0)).toContainText("3 series · 10 repeticiones");
+  await expect(session.getByRole("listitem").nth(0)).toContainText("Descanso: 90 s");
+  await expect(session.getByRole("listitem").nth(0)).toContainText("RIR: 2");
+  await expect(session.getByRole("listitem").nth(1)).toContainText("Remo");
+  await expect(session.getByRole("listitem").nth(1)).toContainText("3 series · 12 repeticiones");
+  await expect(session.getByRole("listitem").nth(1)).toContainText("Descanso: 60 s");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const created = await (await request.get("/api/sessions/active")).json();
+  await page.reload();
+  await expect(session.getByRole("listitem")).toHaveCount(2);
+  expect(await (await request.get("/api/sessions/active")).json()).toEqual(created);
+
+  const back = page.getByRole("link", { name: "Volver a Mis rutinas" });
+  await expect(back).toHaveCSS("border-top-style", "solid");
+  await expect(back).toHaveCSS("min-height", "44px");
+  await page.keyboard.press("Tab");
+  await expect(back).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Mis Rutinas", exact: true })).toBeFocused();
+  const create = page.getByRole("button", { name: "+ Crear Nueva Rutina", exact: true });
+  const resume = page.getByRole("link", { name: "Continuar sesión en curso" });
+  await expect(create).toBeEnabled();
+  await expect(resume).toBeVisible();
+  await expect(resume).toHaveCSS("background-color", await create.evaluate(button => getComputedStyle(button).backgroundColor));
+  await expect(resume).toHaveCSS("min-height", "44px");
+  await page.keyboard.press("Tab");
+  await expect(create).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(resume).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(session.getByRole("listitem")).toHaveCount(2);
+
+  async function expectStartConflict(name: string) {
+    const start = page.getByRole("button", { name, exact: true });
+    await expect(start).toBeEnabled();
+    const [conflict] = await Promise.all([
+      page.waitForResponse(response => response.url().endsWith("/api/sessions") && response.request().method() === "POST"),
+      start.press("Enter"),
+    ]);
+    expect(conflict.status()).toBe(409);
+    await expect(page.getByRole("alert")).toHaveText("Esta rutina ya tiene una sesión en curso.");
+    await expect(page).toHaveURL(/#\/rutinas$/);
+    await expect(start).toBeFocused();
+  }
+
+  await back.click();
+  await expectStartConflict("Iniciar sesión · Fuerza · cuerpo completo");
+  const date = "2099-01-01";
+  const scheduled = await request.post("/api/schedules", { data: { routineId: created.routine.id, date } });
+  expect(scheduled.status()).toBe(201);
+  const schedule = await scheduled.json();
+  try {
+    await page.reload();
+    await expectStartConflict(`Iniciar sesión · Fuerza · cuerpo completo · ${date}`);
+    await resume.click();
+    await expect(session.getByRole("listitem")).toHaveCount(2);
+    expect(await (await request.get("/api/sessions/active")).json()).toEqual(created);
+    expect(await (await request.get("/api/schedules")).json()).toContainEqual(schedule);
+  } finally {
+    expect((await request.delete(`/api/schedules/${schedule.id}`)).status()).toBe(204);
+  }
+});
