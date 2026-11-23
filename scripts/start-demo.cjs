@@ -26,10 +26,11 @@ async function main() {
     routinesFile,
     routinesSeed,
     scheduleFile: pathToFileURL(schedulesFile),
+    trainingSessionFile: pathToFileURL(resolve(root, 'api/data/training-session.demo.local.json')),
   });
   const server = app.listen(3108, '127.0.0.1', () => {
     console.log('Demo Healthy Life: http://127.0.0.1:3108');
-    console.log('Ejemplos de demostración. Cambios guardados en api/data/routines.demo.local.json y schedules.demo.local.json.');
+    console.log('La demo guarda las rutinas, programaciones y sesión activa en archivos *.demo.local.json de api/data.');
     console.log('Las rutinas personales permanecen en su archivo habitual.');
   });
   server.on('error', error => {

@@ -1,5 +1,6 @@
 import { isRoutine, isRoutineSchedule, type Routine, type RoutineUpdate, type RoutineSchedule } from "../../../shared/routines";
 import { isExercise, type Exercise } from "../../../shared/exercises";
+import { isTrainingSession, type TrainingSession } from "../../../shared/trainingSessions";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -78,4 +79,21 @@ export async function updateSchedule(id: string, date: string): Promise<RoutineS
 
 export async function deleteSchedule(id: string): Promise<void> {
   await request(`/schedules/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function loadActiveSession(signal: AbortSignal): Promise<TrainingSession | null> {
+  const result = await request("/sessions/active", { signal });
+  if (result === null || isTrainingSession(result)) return result;
+  throw new Error("La sesión en curso no es válida.");
+}
+
+export async function startTrainingSession(routineId: string, signal: AbortSignal): Promise<TrainingSession> {
+  const result = await request("/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ routineId }),
+    signal,
+  });
+  if (!isTrainingSession(result)) throw new Error("No se pudo confirmar el inicio de la sesión.");
+  return result;
 }

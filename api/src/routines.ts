@@ -3,7 +3,7 @@ import { copyFile, mkdir, readFile, rename, unlink, writeFile } from "node:fs/pr
 import { constants } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { setTimeout as delay } from "node:timers/promises";
+import { runFileTransaction, writeJsonAtomically } from "./jsonStorage.js";
 import { 
   isRoutine, isRoutineCreate, isRoutineUpdate, isRoutineSchedule, 
   type Routine, type RoutineCreate, type RoutineUpdate, type RoutineSchedule 
@@ -15,8 +15,6 @@ export type { Routine, RoutineItem, RoutineCreate, RoutineUpdate, RoutineSchedul
 export class RoutineError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-
-const queues = new Map<string, Promise<unknown>>();
 
 export function createRoutineStore(file: string | URL, seed?: URL) {
   const path = resolve(typeof file === "string" ? file : fileURLToPath(file));
@@ -38,60 +36,36 @@ export function createRoutineStore(file: string | URL, seed?: URL) {
     return routines;
   }
 
-  function transaction<T>(operation: () => Promise<T>): Promise<T> {
-    const previous = queues.get(path) ?? Promise.resolve();
-    const task = previous.catch(() => undefined).then(operation);
-    queues.set(path, task);
-    void task.finally(() => { if (queues.get(path) === task) queues.delete(path); }).catch(() => undefined);
-    return task;
-  }
-
-  async function persist(routines: Routine[]) {
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, JSON.stringify(routines, null, 2) + "\n", { flag: "wx" });
-      for (let attempt = 0; ; attempt++) {
-        try { await rename(temporary, path); break; }
-        catch (error) {
-          if (attempt >= 3 || !["EPERM", "EACCES", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
-          await delay(25 * 2 ** attempt);
-        }
-      }
-    } finally {
-      await unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
-    }
-  }
-
   return {
     read,
     create(input: RoutineCreate): Promise<Routine> {
       if (!isRoutineCreate(input)) return Promise.reject(new RoutineError(400, "Datos de rutina inválidos."));
-      return transaction(async () => {
+      return runFileTransaction(path, async () => {
         const routines = await read();
         const routine: Routine = { id: `rutina-${randomUUID()}`, name: input.name.trim(), version: 1, items: input.items };
-        await persist([...routines, routine]);
+        await writeJsonAtomically(path, [...routines, routine]);
         return routine;
       });
     },
     update(id: string, input: RoutineUpdate): Promise<Routine> {
       if (!isRoutineUpdate(input)) return Promise.reject(new RoutineError(400, "Datos de rutina inválidos."));
-      return transaction(async () => {
+      return runFileTransaction(path, async () => {
         const routines = await read();
         const index = routines.findIndex(routine => routine.id === id);
         if (index < 0) throw new RoutineError(404, "Rutina no encontrada.");
         if (routines[index].version !== input.version) throw new RoutineError(409, "La rutina ha cambiado. Recarga antes de volver a guardar.");
         const updated: Routine = { id, name: input.name.trim(), version: input.version + 1, items: input.items };
         routines[index] = updated;
-        await persist(routines);
+        await writeJsonAtomically(path, routines);
         return updated;
       });
     },
     remove(id: string): Promise<void> {
-      return transaction(async () => {
+      return runFileTransaction(path, async () => {
         const routines = await read();
         const remaining = routines.filter(routine => routine.id !== id);
         if (remaining.length === routines.length) throw new RoutineError(404, "Rutina no encontrada.");
-        await persist(remaining);
+        await writeJsonAtomically(path, remaining);
       });
     },
   };

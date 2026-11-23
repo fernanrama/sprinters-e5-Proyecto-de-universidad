@@ -15,7 +15,11 @@ async function setup(t: TestContext) {
   const routinesFile = pathToFileURL(join(directory, "routines.json"));
   await writeFile(routinesFile, await readFile(seed));
   async function serve() {
-    const server = createApp({ routinesFile }).listen(0, "127.0.0.1");
+    const server = createApp({
+      routinesFile,
+      scheduleFile: pathToFileURL(join(directory, "schedules.json")),
+      trainingSessionFile: pathToFileURL(join(directory, "training-session.json")),
+    }).listen(0, "127.0.0.1");
     await once(server, "listening");
     async function stop() {
       server.closeAllConnections();
@@ -38,6 +42,58 @@ test("lectura individual, listado y 404 de rutinas", async (t) => {
   assert.deepEqual(await (await fetch(`${origin}/routines`)).json(), original);
   assert.deepEqual(await (await fetch(`${origin}/routines/${original[0].id}`)).json(), original[0]);
   assert.equal((await fetch(`${origin}/routines/no-existe`)).status, 404);
+});
+
+test("el inicio de sesión rechaza rutinas vacías o inexistentes", async (t) => {
+  const { origin, original } = await setup(t);
+  const start = (body: unknown) => fetch(`${origin}/sessions`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  assert.equal((await start({})).status, 400);
+  assert.equal((await start({ routineId: "no-existe" })).status, 404);
+  const empty = await start({ routineId: original[1].id });
+  assert.equal(empty.status, 422);
+  assert.deepEqual(await empty.json(), { error: "Añade al menos un ejercicio para iniciar la sesión." });
+  const active = await fetch(`${origin}/sessions/active`);
+  assert.equal(active.status, 200);
+  assert.equal(await active.json(), null);
+});
+
+test("la sesión bloquea otros inicios y conserva la rutina inicial tras editar y reiniciar", async (t) => {
+  const { origin, original, put, stop, serve } = await setup(t);
+  const routine = original[0];
+  const options = (body: unknown) => ({
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const start = (routineId: string) => fetch(`${origin}/sessions`, options({ routineId }));
+  const results = await Promise.all([start(routine.id), start(routine.id)]);
+  assert.deepEqual(results.map(result => result.status).sort(), [201, 409]);
+  const created = results.find(result => result.status === 201);
+  const duplicate = results.find(result => result.status === 409);
+  assert.ok(created && duplicate);
+  const session = await created.json();
+  assert.deepEqual(await duplicate.json(), { error: "Esta rutina ya tiene una sesión en curso." });
+  assert.ok(session.id && Number.isFinite(Date.parse(session.startedAt)));
+  assert.equal(session.routine.id, routine.id);
+  assert.equal(session.routine.name, routine.name);
+  assert.equal(session.routine.version, routine.version);
+  assert.equal(session.routine.items[0].exerciseName, "Sentadilla");
+  assert.deepEqual(session.routine.items.map(({ exerciseName, ...item }: { exerciseName: string }) => item), routine.items);
+
+  const other = await fetch(`${origin}/routines`, options({ name: "Otra rutina", items: routine.items }));
+  assert.equal(other.status, 201);
+  const conflict = await start((await other.json()).id);
+  assert.equal(conflict.status, 409);
+  assert.deepEqual(await conflict.json(), { error: "Ya hay otra sesión en curso." });
+  assert.equal((await put({ ...routine, name: "Editada", items: [] })).status, 200);
+  assert.equal((await start(routine.id)).status, 409);
+  assert.deepEqual(await (await fetch(`${origin}/sessions`)).json(), []);
+
+  await stop();
+  const restarted = await serve();
+  const active = await fetch(`${restarted.origin}/sessions/active`);
+  assert.equal(active.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await active.json(), session);
 });
 test("guardar persiste tras recrear el servidor y no cambia otras rutinas", async (t) => {
   const { put, original, routinesFile, stop, serve } = await setup(t);

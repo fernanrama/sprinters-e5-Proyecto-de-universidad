@@ -11,6 +11,8 @@ const app = createApp({
   catalogFile: pathToFileURL(resolve(process.env.HEALTHY_LIFE_TEST_CATALOG ?? "api/data/exercises.json")),
   routinesFile: pathToFileURL(join(directory, "routines.json")),
   routinesSeed: pathToFileURL(resolve(process.env.HEALTHY_LIFE_TEST_SEED ?? "api/data/routines.seed.json")),
+  scheduleFile: pathToFileURL(join(directory, "schedules.json")),
+  trainingSessionFile: pathToFileURL(join(directory, "training-session.json")),
 });
 const server = app.listen(Number(process.env.HEALTHY_LIFE_TEST_PORT ?? 3107), "127.0.0.1", () => {
   const address = server.address();

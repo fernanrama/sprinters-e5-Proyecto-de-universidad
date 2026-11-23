@@ -4,7 +4,8 @@
 .routine-page-heading p { margin: 0; max-width: 65ch; color: var(--color-muted); line-height: 1.6; overflow-wrap: anywhere; }
 .routine-list-heading { display: flex; gap: 24px; align-items: center; justify-content: space-between; }
 .routine-list-heading > div { min-width: 0; }
-.routines-workspace button, .routine-dialog button { font: inherit; font-weight: 650; min-height: 44px; border-radius: var(--radius-control); padding: 10px 16px; transition: border-color .15s; touch-action: manipulation; }
+.routines-workspace :is(button, .routine-action-link), .routine-dialog button { font: inherit; font-weight: 650; min-height: 44px; border-radius: var(--radius-control); padding: 10px 16px; transition: border-color .15s; touch-action: manipulation; }
+.routines-workspace .routine-action-link { display: inline-flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; }
 .routines-workspace .routine-primary, .routine-dialog .routine-primary { color: white; background: var(--color-brand); border: 1px solid var(--color-brand); }
 .routines-workspace .routine-primary:hover:not(:disabled), .routine-dialog .routine-primary:hover:not(:disabled) { background: var(--color-brand-hover); border-color: var(--color-brand-hover); }
 .routines-workspace .routine-secondary, .routine-dialog .routine-secondary { color: var(--color-text); background: white; border: 1px solid #7b8491; }
@@ -13,7 +14,7 @@
 .routines-workspace .routine-danger:hover { background: #fff0f2; }
 .routines-workspace button:disabled, .routine-dialog button:disabled { opacity: 1; background: #eef0f3; border-color: var(--color-border); color: #727986; cursor: not-allowed; }
 .routines-workspace .routine-back { margin: 0 0 16px; padding: 0; background: transparent; border: 0; color: var(--color-brand-hover); text-decoration: underline; text-underline-offset: 4px; }
-.routines-workspace :is(button, input, select, h1, h2):focus-visible, .routine-dialog :is(button, input):focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.routines-workspace :is(button, .routine-action-link, input, select, h1, h2):focus-visible, .routine-dialog :is(button, input):focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
 .routines-workspace input:focus { box-shadow: none; }
 .routine-state { padding: 32px; border: 1px solid var(--color-border); border-radius: 8px; background: white; }
 .routine-state h2 { margin: 0 0 12px; font-size: 22px; color: var(--color-text); }
@@ -135,4 +136,19 @@
     justify-content: flex-start;
     flex-wrap: wrap;
   }
+}
+.training-exercises {
+  display: grid;
+  gap: 0.75rem;
+  padding-inline-start: 1.75rem;
+}
+
+.training-exercises .routine-saved-row {
+  display: list-item;
+  overflow-wrap: anywhere;
+}
+
+.training-exercises h3,
+.training-exercises p {
+  margin: 0.25rem 0;
 }
