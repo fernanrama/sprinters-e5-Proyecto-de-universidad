@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TrainingSession as Session } from "../../../shared/trainingSessions";
 import { loadActiveSession } from "./api";
+import { RestTimer } from "./RestTimer";
 import "./routine-workspace.css";
 
 export const trainingSessionRoute = "#/rutinas/sesion";
@@ -46,6 +47,10 @@ export function TrainingSession() {
             <p>{item.sets} series · {item.repetitions} repeticiones</p>
             {item.parameters?.restSeconds !== undefined && <p>Descanso: {item.parameters.restSeconds} s</p>}
             {item.parameters?.rir !== undefined && <p>RIR: {item.parameters.rir}</p>}
+            <RestTimer
+              exerciseName={item.exerciseName}
+              configuredSeconds={item.parameters?.restSeconds}
+            />
           </div>
         </li>)}
       </ol>
