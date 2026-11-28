@@ -25,3 +25,25 @@ export const PERFORMED_SET_LIMITS = {
   weightKg: { min: 0, max: 500, step: 0.5 },
   rpe: { min: 1, max: 10, step: 0.5 },
 } as const;
+
+export type PerformedSetField = keyof typeof PERFORMED_SET_LIMITS;
+
+/** Comprueba que un valor es numérico, está dentro de los límites y respeta el paso permitido. */
+export function isValidSetValue(field: PerformedSetField, value: unknown): value is number {
+  const { min, max, step } = PERFORMED_SET_LIMITS[field];
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) return false;
+  const steps = (value - min) / step;
+  return Math.abs(steps - Math.round(steps)) < 1e-9;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function isPerformedSetInput(value: unknown): value is PerformedSetInput {
+  return record(value) &&
+    typeof value.itemId === "string" && !!value.itemId.trim() &&
+    isValidSetValue("repetitions", value.repetitions) &&
+    isValidSetValue("weightKg", value.weightKg) &&
+    isValidSetValue("rpe", value.rpe);
+}
