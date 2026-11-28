@@ -344,3 +344,14 @@ test("HU03: el registro de series rechaza datos no válidos sin modificar la ses
   assert.equal(malformed.status, 400);
   assert.deepEqual(await (await fetch(`${origin}/sessions/active`)).json(), before);
 });
+
+test("HU03: dos series enviadas a la vez se guardan ambas con números distintos", async (t) => {
+  const { origin, original, recordSet, startSession } = await setupSession(t);
+  assert.equal((await startSession()).status, 201);
+  const itemId = original[0].items[0].id;
+  const responses = await Promise.all([8, 7].map(repetitions => recordSet({ itemId, repetitions, weightKg: 60, rpe: 8 })));
+  assert.deepEqual(responses.map(response => response.status), [201, 201]);
+  const { performedSets } = await (await fetch(`${origin}/sessions/active`)).json();
+  assert.equal(performedSets.length, 2);
+  assert.deepEqual(performedSets.map((set: { setNumber: number }) => set.setNumber).sort(), [1, 2]);
+});
