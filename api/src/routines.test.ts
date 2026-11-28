@@ -280,3 +280,42 @@ test("POST y DELETE no reemplazan un JSON corrupto", async t => {
   assert.equal((await fetch(`${origin}/routines/${original[0].id}`, { method: "DELETE" })).status, 500);
   assert.equal(await readFile(routinesFile, "utf8"), "{corrupto");
 });
+
+// HU03 · SCRUM-123: registrar series realizadas en la sesión activa.
+async function setupSession(t: TestContext) {
+  const context = await setup(t);
+  const json = (body: unknown) => ({
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const recordSet = (body: unknown, origin = context.origin) => fetch(`${origin}/sessions/active/sets`, json(body));
+  const startSession = () => fetch(`${context.origin}/sessions`, json({ routineId: context.original[0].id }));
+  return { ...context, recordSet, startSession };
+}
+
+test("HU03: una serie guardada conserva sus valores reales aunque difieran de los planificados", async (t) => {
+  const { origin, original, recordSet, startSession, stop, serve } = await setupSession(t);
+  assert.equal((await startSession()).status, 201);
+  const item = original[0].items[0];
+  const real = { itemId: item.id, repetitions: item.repetitions - 2, weightKg: 62.5, rpe: 9 };
+
+  const response = await recordSet(real);
+  assert.equal(response.status, 201);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const set = await response.json();
+  assert.deepEqual({ itemId: set.itemId, repetitions: set.repetitions, weightKg: set.weightKg, rpe: set.rpe }, real);
+  assert.equal(set.setNumber, 1);
+  assert.ok(set.id && Number.isFinite(Date.parse(set.recordedAt)));
+
+  const second = await (await recordSet({ ...real, repetitions: item.repetitions, weightKg: 0 })).json();
+  assert.equal(second.setNumber, 2, "numera las series de cada ejercicio");
+  const other = await (await recordSet({ ...real, itemId: original[0].items[1].id })).json();
+  assert.equal(other.setNumber, 1, "cada ejercicio tiene su propia numeración");
+
+  const active = await (await fetch(`${origin}/sessions/active`)).json();
+  assert.deepEqual(active.performedSets, [set, second, other]);
+  assert.equal(active.routine.items[0].repetitions, item.repetitions, "la rutina planificada no cambia");
+
+  await stop();
+  const restarted = await serve();
+  assert.deepEqual((await (await fetch(`${restarted.origin}/sessions/active`)).json()).performedSets, [set, second, other]);
+});
