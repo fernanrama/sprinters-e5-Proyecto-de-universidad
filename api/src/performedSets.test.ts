@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isPerformedSet, isPerformedSetInput, isValidSetValue } from "../../shared/performedSets.js";
+import { isTrainingSession } from "../../shared/trainingSessions.js";
 
 const input = { itemId: "item-1", repetitions: 8, weightKg: 62.5, rpe: 8.5 };
 
@@ -29,4 +30,19 @@ test("HU03: una serie guardada exige id, número de serie y fecha", () => {
   assert.equal(isPerformedSet({ ...set, id: "" }), false);
   assert.equal(isPerformedSet({ ...set, setNumber: 0 }), false);
   assert.equal(isPerformedSet({ ...set, recordedAt: "ayer" }), false);
+});
+
+test("HU03: las sesiones guardadas antes de HU03 siguen siendo válidas", () => {
+  const session = {
+    id: "session-1",
+    startedAt: "2026-11-28T17:00:00.000Z",
+    routine: { id: "r-1", name: "Fuerza", version: 1,
+      items: [{ id: "item-1", exerciseId: "sentadilla", sets: 3, repetitions: 10, exerciseName: "Sentadilla" }] },
+  };
+  const set = { ...input, id: "set-1", setNumber: 1, recordedAt: "2026-11-28T18:00:00.000Z" };
+  assert.equal(isTrainingSession(session), true);
+  assert.equal(isTrainingSession({ ...session, performedSets: [set] }), true);
+  assert.equal(isTrainingSession({ ...session, performedSets: [{ ...set, itemId: "otro" }] }), false);
+  assert.equal(isTrainingSession({ ...session, performedSets: [set, set] }), false, "ids duplicados");
+  assert.equal(isTrainingSession({ ...session, performedSets: {} }), false);
 });
