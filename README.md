@@ -194,6 +194,8 @@ La API lee el archivo en cada petición. No subir al repositorio las modificacio
 | --- | --- | --- |
 | GET | `/health` | Estado del servicio. |
 | GET | `/exercises` | Lista de ejercicios; `[]` si está vacía. |
+| GET | `/sessions/active` | Sesión en curso con sus series realizadas, o `null`. |
+| POST | `/sessions/active/sets` | Registra una serie realizada (repeticiones, peso, RPE). Ver [HU03](docs/HU03.md). |
 
 Estas rutas también están disponibles bajo el prefijo `/api`.
 
