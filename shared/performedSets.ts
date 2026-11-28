@@ -47,3 +47,11 @@ export function isPerformedSetInput(value: unknown): value is PerformedSetInput 
     isValidSetValue("weightKg", value.weightKg) &&
     isValidSetValue("rpe", value.rpe);
 }
+
+export function isPerformedSet(value: unknown): value is PerformedSet {
+  if (!isPerformedSetInput(value)) return false;
+  const { id, setNumber, recordedAt } = value as Record<string, unknown>;
+  return typeof id === "string" && !!id.trim() &&
+    Number.isSafeInteger(setNumber) && (setNumber as number) >= 1 &&
+    typeof recordedAt === "string" && Number.isFinite(Date.parse(recordedAt));
+}
