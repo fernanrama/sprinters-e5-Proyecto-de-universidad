@@ -319,3 +319,28 @@ test("HU03: una serie guardada conserva sus valores reales aunque difieran de lo
   const restarted = await serve();
   assert.deepEqual((await (await fetch(`${restarted.origin}/sessions/active`)).json()).performedSets, [set, second, other]);
 });
+
+test("HU03: el registro de series rechaza datos no válidos sin modificar la sesión", async (t) => {
+  const { origin, original, recordSet, startSession } = await setupSession(t);
+  const itemId = original[0].items[0].id;
+  const noSession = await recordSet({ itemId, repetitions: 8, weightKg: 60, rpe: 8 });
+  assert.equal(noSession.status, 404);
+  assert.deepEqual(await noSession.json(), { error: "No hay ninguna sesión en curso." });
+
+  assert.equal((await startSession()).status, 201);
+  const before = await (await fetch(`${origin}/sessions/active`)).json();
+  for (const body of [{}, { itemId, repetitions: 0, weightKg: 60, rpe: 8 }, { itemId, repetitions: 8, weightKg: -5, rpe: 8 },
+    { itemId, repetitions: 8, weightKg: 60, rpe: 11 }, { itemId, repetitions: 8, weightKg: "60", rpe: 8 }]) {
+    const response = await recordSet(body);
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.match((await response.json()).error, /repeticiones de 1 a 100/);
+  }
+  const unknown = await recordSet({ itemId: "no-existe", repetitions: 8, weightKg: 60, rpe: 8 });
+  assert.equal(unknown.status, 400);
+  assert.deepEqual(await unknown.json(), { error: "El ejercicio no pertenece a la sesión en curso." });
+  const malformed = await fetch(`${origin}/sessions/active/sets`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: "{",
+  });
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(await (await fetch(`${origin}/sessions/active`)).json(), before);
+});
