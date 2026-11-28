@@ -4,6 +4,7 @@ import compression from "compression";
 import { createRoutineStore, createScheduleStore, RoutineError, isRoutineCreate, isRoutineUpdate } from "./routines.js";
 import { createTrainingSessionStore } from "./trainingSessions.js";
 import { isExercise } from "../../shared/exercises.js";
+import { isPerformedSetInput } from "../../shared/performedSets.js";
 import type { Exercise } from "../../shared/exercises.js";
 export type { Exercise } from "../../shared/exercises.js";
 export { isExercise } from "../../shared/exercises.js";
@@ -159,6 +160,16 @@ export function createApp(options: {
 
   router.get("/sessions/active", async (_request, response) => {
     response.set("Cache-Control", "no-store").json(await trainingSessions.read());
+  });
+
+  // HU03 · SCRUM-123: registrar una serie realizada en la sesión activa.
+  router.post("/sessions/active/sets", async (request, response) => {
+    if (!isPerformedSetInput(request.body)) {
+      throw new RoutineError(400, "Revisa la serie: repeticiones de 1 a 100, peso de 0 a 500 kg (en pasos de 0,5) y RPE de 1 a 10 (en pasos de 0,5).");
+    }
+    const { itemId, repetitions, weightKg, rpe } = request.body;
+    const set = await trainingSessions.recordSet({ itemId, repetitions, weightKg, rpe });
+    response.set("Cache-Control", "no-store").status(201).json(set);
   });
 
   app.use("/api", router);
